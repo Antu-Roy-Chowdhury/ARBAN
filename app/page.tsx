@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   getDistinctPatients,
@@ -32,7 +32,7 @@ interface DataState {
   review: Review | null;
 }
 
-export default function Home() {
+function HomeContent() {
   const searchParams = useSearchParams();
 
   const [bodyParts, setBodyParts] = useState<string[]>([]);
@@ -346,5 +346,25 @@ export default function Home() {
         </div>
       </div>
     </main>
+  );
+}
+
+
+function HomeFallback() {
+  return (
+    <main className="min-h-screen bg-white">
+      <div className="mx-auto max-w-[1600px] px-6 py-10">
+        <div className="h-10 w-80 animate-pulse rounded bg-gray-200" />
+        <div className="mt-6 h-[70vh] animate-pulse rounded-xl bg-gray-100" />
+      </div>
+    </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<HomeFallback />}>
+      <HomeContent />
+    </Suspense>
   );
 }
