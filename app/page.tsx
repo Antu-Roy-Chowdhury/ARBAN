@@ -152,13 +152,22 @@ function HomeContent() {
 
         try {
           const storageResponse = await fetch(`/api/patient-images/${currentPatientId}`);
-          const storageData = await storageResponse.json();
+          const contentType = storageResponse.headers.get("content-type") || "";
 
-          if (storageData.images && storageData.images.length > 0) {
-            setData((prev) => ({
-              ...prev,
-              storageImages: storageData.images,
-            }));
+          if (!storageResponse.ok || !contentType.includes("application/json")) {
+            console.error("Error fetching local images:", {
+              status: storageResponse.status,
+              contentType,
+            });
+          } else {
+            const storageData = await storageResponse.json();
+
+            if (storageData.images && storageData.images.length > 0) {
+              setData((prev) => ({
+                ...prev,
+                storageImages: storageData.images,
+              }));
+            }
           }
         } catch (err) {
           console.error("Error fetching local images:", err);
