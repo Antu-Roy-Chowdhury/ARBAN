@@ -11,30 +11,30 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Type definitions for database tables
 export interface Patient {
-  patient_id: number;
-  patient_name: string;
-  age: number;
-  sex: string;
+  patient_id: string;
+  patient_name: string | null;
+  age: string | null;
+  sex: string | null;
 }
 
 export interface ImageMetadata {
   id: number;
-  patient_id: number;
-  file_name: string;
-  body_part_clean: string;
-  body_part_raw: string;
-  view_position: string;
-  study_date: string;
-  modality: string;
-  series_description: string;
-  instance_number: number;
-  rows: number;
-  columns: number;
-  age: number;
-  patient_name: string;
-  sex: string;
+  patient_id: string;
+  file_name: string | null;
+  file_path: string | null;
+  body_part_clean: string | null;
+  body_part_raw: string | null;
+  view_position: string | null;
+  study_date: string | null;
+  modality: string | null;
+  series_description: string | null;
+  instance_number: number | null;
+  rows: number | null;
+  columns: number | null;
+  age: string | null;
+  patient_name: string | null;
+  sex: string | null;
   has_missing_body_part: boolean;
 }
 
@@ -46,71 +46,96 @@ export interface StorageImage {
 
 export interface Report {
   id: number;
-  patient_id: number;
-  report_title: string;
-  findings_text: string;
-  impression_text: string;
-  full_report_text: string;
+  patient_id: string;
+  report_title: string | null;
+  patient_name: string | null;
+  age_raw: string | null;
+  findings_text: string | null;
+  impression_text: string | null;
+  full_report_text: string | null;
+  raw_text: string | null;
   has_missing_impression: boolean;
+  created_at: string | null;
 }
 
 export interface Review {
   id: number;
-  patient_id: number;
-  image_id: number;
+  patient_id: string | null;
+  image_id: number | null;
   status: "matched" | "mismatch" | "unsure";
   label: "normal" | "abnormal";
-  final_impression: string;
-  notes: string;
-  reviewer_name: string;
+  final_impression: string | null;
+  notes: string | null;
+  reviewer_name: string | null;
   reviewed_at: string;
 }
 
-function buildStorageImageUrl(rootUrl: string, objectPath: string) {
-  const cleanRoot = rootUrl.replace(/\/$/, "");
-  const encodedPath = objectPath
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-
-  if (cleanRoot.endsWith("/storage/v1/object/public/images")) {
-    return `${cleanRoot}/${encodedPath}`;
-  }
-
-  if (cleanRoot.endsWith("/storage/v1/object/public")) {
-    return `${cleanRoot}/images/${encodedPath}`;
-  }
-
-  return `${cleanRoot}/storage/v1/object/public/images/${encodedPath}`;
+export interface ReviewQueueItem {
+  patient_id: string;
+  patient_name: string | null;
+  image_count: number;
+  report_count: number;
+  latest_reviewed_at: string | null;
+  latest_review_status: Review["status"] | null;
+  is_reviewed: boolean;
 }
 
-// Fetch distinct patient IDs (for filtering)
-export async function getDistinctPatients(bodyPartFilter?: string) {
-  try {
-    let query = supabase.from("images").select("patient_id");
+function naturalCompare(a: string, b: string) {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
 
-    if (bodyPartFilter && bodyPartFilter !== "ALL") {
-      query = query.eq("body_part_clean", bodyPartFilter);
+function sortPatientsByReviewStatus(patientIds: string[], reviewedSet: Set<string>) {
+  return [...patientIds].sort((a, b) => {
+    const aReviewed = reviewedSet.has(a);
+    const bReviewed = reviewedSet.has(b);
+
+    if (aReviewed !== bReviewed) {
+      return aReviewed ? 1 : -1;
     }
 
-    const { data, error } = await query;
+    return naturalCompare(a, b);
+  });
+}
 
-    if (error) throw error;
+export async function getDistinctPatients(bodyPartFilter?: string) {
+  try {
+    let imagesQuery = supabase.from("images").select("patient_id");
 
-    const patientIds = data
-      ?.map((row: any) => row.patient_id)
-      .filter((id: number, idx: number, arr: number[]) => arr.indexOf(id) === idx)
-      .sort((a: number, b: number) => a - b) || [];
+    if (bodyPartFilter && bodyPartFilter !== "ALL") {
+      imagesQuery = imagesQuery.eq("body_part_clean", bodyPartFilter);
+    }
 
-    return patientIds;
+    const [{ data: imageRows, error: imagesError }, { data: reviewRows, error: reviewsError }] =
+      await Promise.all([
+        imagesQuery,
+        supabase.from("reviews").select("patient_id").not("patient_id", "is", null),
+      ]);
+
+    if (imagesError) throw imagesError;
+    if (reviewsError) throw reviewsError;
+
+    const patientIds = Array.from(
+      new Set(
+        (imageRows || [])
+          .map((row: { patient_id: string | null }) => row.patient_id)
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+
+    const reviewedSet = new Set(
+      (reviewRows || [])
+        .map((row: { patient_id: string | null }) => row.patient_id)
+        .filter((id): id is string => Boolean(id))
+    );
+
+    return sortPatientsByReviewStatus(patientIds, reviewedSet);
   } catch (error) {
     console.error("Error fetching distinct patients:", error);
     throw error;
   }
 }
 
-// Fetch patient info
-export async function getPatientInfo(patientId: number) {
+export async function getPatientInfo(patientId: string) {
   try {
     const { data, error } = await supabase
       .from("patients")
@@ -126,14 +151,14 @@ export async function getPatientInfo(patientId: number) {
   }
 }
 
-// Fetch all images for a patient
-export async function getPatientImages(patientId: number) {
+export async function getPatientImages(patientId: string) {
   try {
     const { data, error } = await supabase
       .from("images")
       .select("*")
       .eq("patient_id", patientId)
-      .order("instance_number", { ascending: true });
+      .order("instance_number", { ascending: true, nullsFirst: false })
+      .order("id", { ascending: true });
 
     if (error) throw error;
     return data as ImageMetadata[];
@@ -143,77 +168,24 @@ export async function getPatientImages(patientId: number) {
   }
 }
 
-
-export async function getPatientStorageImages(patientId: number) {
-  try {
-    const rootUrl = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_URL;
-
-    if (!rootUrl) {
-      throw new Error("Missing NEXT_PUBLIC_SUPABASE_STORAGE_URL environment variable.");
-    }
-
-    const folderNames = Array.from(
-      new Set([patientId.toString(), patientId.toString().padStart(5, "0")])
-    );
-
-    for (const folderName of folderNames) {
-      const folderPath = `images/${folderName}`;
-      const { data, error } = await supabase.storage
-        .from("images")
-        .list(folderPath, {
-          limit: 500,
-          sortBy: { column: "name", order: "asc" },
-        });
-
-      if (error) {
-        continue;
-      }
-
-      const files = (data || [])
-        .filter((file) => file.name && !file.name.endsWith("/"))
-        .map((file) => {
-          const objectPath = `${folderPath}/${file.name}`;
-          const publicUrl = supabase.storage.from("images").getPublicUrl(objectPath)
-            .data.publicUrl;
-
-          return {
-            name: file.name,
-            path: objectPath,
-            url: buildStorageImageUrl(rootUrl, objectPath) || publicUrl,
-          };
-        }) as StorageImage[];
-
-      if (files.length > 0) {
-        return files;
-      }
-    }
-
-    return [];
-  } catch (error) {
-    console.error("Error fetching patient storage images:", error);
-    return [];
-  }
-}
-
-// Fetch report for a patient
-export async function getPatientReport(patientId: number) {
+export async function getPatientReports(patientId: string) {
   try {
     const { data, error } = await supabase
       .from("reports")
       .select("*")
       .eq("patient_id", patientId)
-      .single();
+      .order("created_at", { ascending: false, nullsFirst: false })
+      .order("id", { ascending: false });
 
-    if (error && error.code !== "PGRST116") throw error;
-    return data as Report | null;
+    if (error) throw error;
+    return (data || []) as Report[];
   } catch (error) {
-    console.error("Error fetching patient report:", error);
-    return null;
+    console.error("Error fetching patient reports:", error);
+    return [];
   }
 }
 
-// Fetch latest review for a patient
-export async function getPatientLatestReview(patientId: number) {
+export async function getPatientLatestReview(patientId: string) {
   try {
     const { data, error } = await supabase
       .from("reviews")
@@ -230,27 +202,108 @@ export async function getPatientLatestReview(patientId: number) {
   }
 }
 
-// Get distinct body parts for filtering
 export async function getDistinctBodyParts() {
   try {
     const { data, error } = await supabase.from("images").select("body_part_clean");
 
     if (error) throw error;
 
-    const bodyParts = data
-      ?.map((row: any) => row.body_part_clean)
-      .filter((part: string | null) => part !== null)
-      .filter((part: string, idx: number, arr: string[]) => arr.indexOf(part) === idx)
-      .sort() || [];
+    const bodyParts = Array.from(
+      new Set(
+        (data || [])
+          .map((row: { body_part_clean: string | null }) => row.body_part_clean)
+          .filter((part): part is string => Boolean(part))
+      )
+    ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
 
-    return bodyParts as string[];
+    return bodyParts;
   } catch (error) {
     console.error("Error fetching body parts:", error);
     return [];
   }
 }
 
-// Submit a review
+export async function getReviewQueue() {
+  try {
+    const [
+      { data: imageRows, error: imagesError },
+      { data: patientRows, error: patientsError },
+      { data: reportRows, error: reportsError },
+      { data: reviewRows, error: reviewsError },
+    ] = await Promise.all([
+      supabase.from("images").select("patient_id"),
+      supabase.from("patients").select("patient_id, patient_name"),
+      supabase.from("reports").select("patient_id"),
+      supabase
+        .from("reviews")
+        .select("patient_id, reviewed_at, status")
+        .order("reviewed_at", { ascending: false }),
+    ]);
+
+    if (imagesError) throw imagesError;
+    if (patientsError) throw patientsError;
+    if (reportsError) throw reportsError;
+    if (reviewsError) throw reviewsError;
+
+    const patientNameMap = new Map(
+      (patientRows || []).map((row: { patient_id: string; patient_name: string | null }) => [
+        row.patient_id,
+        row.patient_name,
+      ])
+    );
+
+    const imageCountMap = new Map<string, number>();
+    for (const row of imageRows || []) {
+      const patientId = (row as { patient_id: string | null }).patient_id;
+      if (!patientId) continue;
+      imageCountMap.set(patientId, (imageCountMap.get(patientId) || 0) + 1);
+    }
+
+    const reportCountMap = new Map<string, number>();
+    for (const row of reportRows || []) {
+      const patientId = (row as { patient_id: string | null }).patient_id;
+      if (!patientId) continue;
+      reportCountMap.set(patientId, (reportCountMap.get(patientId) || 0) + 1);
+    }
+
+    const latestReviewMap = new Map<
+      string,
+      { reviewed_at: string | null; status: Review["status"] | null }
+    >();
+    for (const row of reviewRows || []) {
+      const review = row as {
+        patient_id: string | null;
+        reviewed_at: string | null;
+        status: Review["status"] | null;
+      };
+      if (!review.patient_id || latestReviewMap.has(review.patient_id)) continue;
+      latestReviewMap.set(review.patient_id, {
+        reviewed_at: review.reviewed_at,
+        status: review.status,
+      });
+    }
+
+    const patientIds = Array.from(imageCountMap.keys());
+    const reviewedSet = new Set(latestReviewMap.keys());
+
+    return sortPatientsByReviewStatus(patientIds, reviewedSet).map((patientId) => {
+      const latestReview = latestReviewMap.get(patientId);
+      return {
+        patient_id: patientId,
+        patient_name: patientNameMap.get(patientId) || null,
+        image_count: imageCountMap.get(patientId) || 0,
+        report_count: reportCountMap.get(patientId) || 0,
+        latest_reviewed_at: latestReview?.reviewed_at || null,
+        latest_review_status: latestReview?.status || null,
+        is_reviewed: reviewedSet.has(patientId),
+      } satisfies ReviewQueueItem;
+    });
+  } catch (error) {
+    console.error("Error fetching review queue:", error);
+    return [];
+  }
+}
+
 export async function submitReview(review: Omit<Review, "id" | "reviewed_at">) {
   try {
     const { data, error } = await supabase
@@ -266,6 +319,3 @@ export async function submitReview(review: Omit<Review, "id" | "reviewed_at">) {
     throw error;
   }
 }
-
-
-

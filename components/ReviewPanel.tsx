@@ -7,8 +7,8 @@ import { useState } from "react";
 
 interface ReviewPanelProps {
   review: Review | null;
-  patientId: number;
-  imageId: number;
+  patientId: string;
+  imageId: number | null;
   onSubmit?: (review: Omit<Review, "id" | "reviewed_at">) => Promise<void>;
   isLoading?: boolean;
   isSubmitting?: boolean;
@@ -52,6 +52,11 @@ export function ReviewPanel({
     setSubmitError(null);
     setSubmitSuccess(false);
 
+    if (!patientId) {
+      setSubmitError("Missing patient ID");
+      return;
+    }
+
     try {
       await onSubmit?.({
         patient_id: patientId,
@@ -93,18 +98,17 @@ export function ReviewPanel({
 
       {submitSuccess && (
         <div className="mb-4 p-3 bg-green-50 border border-green-300 rounded text-sm text-green-800">
-          ✓ Review submitted successfully
+          Review submitted successfully
         </div>
       )}
 
       {submitError && (
         <div className="mb-4 p-3 bg-red-50 border border-red-300 rounded text-sm text-red-800">
-          ✗ {submitError}
+          {submitError}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Status */}
         <div>
           <label className="block text-sm font-semibold mb-2">
             Report Match Status
@@ -127,7 +131,6 @@ export function ReviewPanel({
           </div>
         </div>
 
-        {/* Label */}
         <div>
           <label className="block text-sm font-semibold mb-2">Finding</label>
           <div className="flex gap-2">
@@ -148,7 +151,6 @@ export function ReviewPanel({
           </div>
         </div>
 
-        {/* Final Impression */}
         <div>
           <label htmlFor="impression" className="block text-sm font-semibold mb-2">
             Final Impression
@@ -165,7 +167,6 @@ export function ReviewPanel({
           />
         </div>
 
-        {/* Notes */}
         <div>
           <label htmlFor="notes" className="block text-sm font-semibold mb-2">
             Additional Notes
@@ -180,7 +181,6 @@ export function ReviewPanel({
           />
         </div>
 
-        {/* Reviewer Name */}
         <div>
           <label htmlFor="reviewer" className="block text-sm font-semibold mb-2">
             Reviewer Name

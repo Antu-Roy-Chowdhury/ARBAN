@@ -1,12 +1,13 @@
 "use client";
 
-import { Suspense, useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   getDistinctPatients,
   getPatientInfo,
   getPatientImages,
-  getPatientReport,
+  getPatientReports,
   getPatientLatestReview,
   getDistinctBodyParts,
   submitReview,
@@ -28,20 +29,29 @@ interface DataState {
   patient: Patient | null;
   images: ImageMetadata[];
   storageImages: StorageImage[];
-  report: Report | null;
+  reports: Report[];
   review: Review | null;
+}
+
+function normalizePatientKey(value: string) {
+  const trimmed = value.trim();
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isNaN(parsed) ? trimmed : String(parsed);
 }
 
 function HomeContent() {
   const searchParams = useSearchParams();
 
   const [bodyParts, setBodyParts] = useState<string[]>([]);
-  const [patientList, setPatientList] = useState<number[]>([]);
+  const [patientList, setPatientList] = useState<string[]>([]);
   const [selectedFilter, setSelectedFilter] = useState<string>(
     searchParams.get("filter") || "ALL"
   );
-  const [currentPatientId, setCurrentPatientId] = useState<number | null>(
-    parseInt(searchParams.get("patient") || "0") || null
+  const [currentPatientId, setCurrentPatientId] = useState<string | null>(
+    searchParams.get("patient") || null
+  );
+  const [patientSearch, setPatientSearch] = useState<string>(
+    searchParams.get("patient") || ""
   );
   const [selectedImageId, setSelectedImageId] = useState<number | null>(null);
 
@@ -49,7 +59,7 @@ function HomeContent() {
     patient: null,
     images: [],
     storageImages: [],
-    report: null,
+    reports: [],
     review: null,
   });
 
@@ -65,6 +75,10 @@ function HomeContent() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const patientOptions = useMemo(
+    () => patientList.map((patientId) => ({ patientId, normalized: normalizePatientKey(patientId) })),
+    [patientList]
+  );
 
   useEffect(() => {
     const loadBodyParts = async () => {
@@ -90,8 +104,9 @@ function HomeContent() {
         );
         setPatientList(patients);
 
-        if (patients.length > 0 && !patients.includes(currentPatientId || 0)) {
+        if (patients.length > 0 && (!currentPatientId || !patients.includes(currentPatientId))) {
           setCurrentPatientId(patients[0]);
+          setPatientSearch(patients[0]);
           setSelectedImageId(null);
         }
       } catch (err) {
@@ -103,12 +118,18 @@ function HomeContent() {
     };
 
     loadPatients();
-  }, [selectedFilter]);
+  }, [selectedFilter, currentPatientId]);
+
+  useEffect(() => {
+    if (currentPatientId) {
+      setPatientSearch(currentPatientId);
+    }
+  }, [currentPatientId]);
 
   useEffect(() => {
     const params = new URLSearchParams();
     if (selectedFilter !== "ALL") params.set("filter", selectedFilter);
-    if (currentPatientId) params.set("patient", currentPatientId.toString());
+    if (currentPatientId) params.set("patient", currentPatientId);
 
     const queryString = params.toString();
     const newUrl = queryString ? `/?${queryString}` : "/";
@@ -131,10 +152,10 @@ function HomeContent() {
       setSelectedImageId(null);
 
       try {
-        const [patient, images, report, review] = await Promise.all([
+        const [patient, images, reports, review] = await Promise.all([
           getPatientInfo(currentPatientId),
           getPatientImages(currentPatientId),
-          getPatientReport(currentPatientId),
+          getPatientReports(currentPatientId),
           getPatientLatestReview(currentPatientId),
         ]);
 
@@ -142,7 +163,7 @@ function HomeContent() {
           patient,
           images: images || [],
           storageImages: [],
-          report,
+          reports,
           review,
         });
 
@@ -202,6 +223,20 @@ function HomeContent() {
     setSelectedFilter(newFilter);
   };
 
+  const handleFindPatient = () => {
+    const target = normalizePatientKey(patientSearch);
+    const exactMatch = patientOptions.find((item) => item.patientId === patientSearch.trim());
+    const normalizedMatches = patientOptions.filter((item) => item.normalized === target);
+    const matchedPatient = exactMatch?.patientId || normalizedMatches[0]?.patientId;
+
+    if (matchedPatient) {
+      setCurrentPatientId(matchedPatient);
+      setError(null);
+    } else {
+      setError(`Patient ID not found: ${patientSearch}`);
+    }
+  };
+
   const handlePrevPatient = useCallback(() => {
     if (!currentPatientId) return;
     const currentIndex = patientList.indexOf(currentPatientId);
@@ -239,14 +274,19 @@ function HomeContent() {
       await submitReview(review);
       const latestReview = await getPatientLatestReview(currentPatientId!);
       setData((prev) => ({ ...prev, review: latestReview }));
+      const refreshedPatients = await getDistinctPatients(
+        selectedFilter === "ALL" ? undefined : selectedFilter
+      );
+      setPatientList(refreshedPatients);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const currentIndex = patientList.indexOf(currentPatientId || 0);
+  const currentIndex = currentPatientId ? patientList.indexOf(currentPatientId) : -1;
   const isFirstPatient = currentIndex <= 0;
   const isLastPatient = currentIndex >= patientList.length - 1;
+  const primaryReport = data.reports[0] || null;
 
   return (
     <main className="min-h-screen bg-white">
@@ -256,12 +296,40 @@ function HomeContent() {
             <h1 className="text-2xl font-bold text-gray-900">
               Medical Image Report Verification
             </h1>
-            <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-800">
-              {currentIndex + 1} / {patientList.length}
-            </span>
+            <div className="flex items-center gap-3">
+              <Link href="/review-status" className="text-sm font-medium text-blue-700 hover:text-blue-900">
+                Review Status
+              </Link>
+              <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-800">
+                {Math.max(currentIndex + 1, 0)} / {patientList.length}
+              </span>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-end gap-4">
+            <div className="min-w-[220px]">
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Find by Patient ID
+              </label>
+              <div className="flex gap-2">
+                <input
+                  value={patientSearch}
+                  onChange={(e) => setPatientSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleFindPatient();
+                    }
+                  }}
+                  className="w-40 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Patient ID"
+                />
+                <Button type="button" onClick={handleFindPatient} size="sm">
+                  Find
+                </Button>
+              </div>
+            </div>
+
             <div className="min-w-[260px] flex-1">
               <label className="mb-2 block text-sm font-semibold text-gray-700">
                 Filter by Body Part
@@ -331,12 +399,12 @@ function HomeContent() {
               isLoading={loading.images}
             />
             <ReportPanel
-              report={data.report}
+              reports={data.reports}
               images={data.images}
               isLoading={loading.report}
             />
             <AutoFlagsPanel
-              report={data.report}
+              report={primaryReport}
               images={data.images}
               isLoading={loading.report}
             />
@@ -345,8 +413,8 @@ function HomeContent() {
           <div className="xl:sticky xl:top-28 xl:h-fit">
             <ReviewPanel
               review={data.review}
-              patientId={currentPatientId || 0}
-              imageId={selectedImageId || 0}
+              patientId={currentPatientId || ""}
+              imageId={selectedImageId}
               onSubmit={handleSubmitReview}
               isLoading={loading.review}
               isSubmitting={submitting}
@@ -357,7 +425,6 @@ function HomeContent() {
     </main>
   );
 }
-
 
 function HomeFallback() {
   return (

@@ -2,10 +2,10 @@
 
 import { Report, ImageMetadata } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface ReportPanelProps {
-  report: Report | null;
+  reports: Report[];
   images: ImageMetadata[];
   isLoading?: boolean;
 }
@@ -45,6 +45,10 @@ const ABNORMALITY_KEYWORDS = [
   "occlusion",
 ];
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function highlightText(text: string, bodyParts: string[]) {
   if (!text) return <></>;
 
@@ -53,7 +57,7 @@ function highlightText(text: string, bodyParts: string[]) {
   const abnormalityMatches: { text: string; index: number }[] = [];
 
   bodyParts.forEach((part) => {
-    const regex = new RegExp(`\b${part}\b`, "gi");
+    const regex = new RegExp(`\\b${escapeRegExp(part)}\\b`, "gi");
     let match;
     while ((match = regex.exec(text)) !== null) {
       bodyPartMatches.push({ text: match[0], index: match.index });
@@ -61,7 +65,7 @@ function highlightText(text: string, bodyParts: string[]) {
   });
 
   ABNORMALITY_KEYWORDS.forEach((keyword) => {
-    const regex = new RegExp(`\b${keyword}s?\b`, "gi");
+    const regex = new RegExp(`\\b${escapeRegExp(keyword)}s?\\b`, "gi");
     let match;
     while ((match = regex.exec(text)) !== null) {
       const isAlreadyHighlighted = bodyPartMatches.some(
@@ -97,16 +101,25 @@ function highlightText(text: string, bodyParts: string[]) {
 }
 
 export function ReportPanel({
-  report,
+  reports,
   images,
   isLoading = false,
 }: ReportPanelProps) {
   const [activeTab, setActiveTab] = useState<"findings" | "impression" | "report">(
     "report"
   );
+  const [selectedReportIndex, setSelectedReportIndex] = useState(0);
+
+  useEffect(() => {
+    setSelectedReportIndex(0);
+  }, [reports.length]);
 
   const bodyParts = Array.from(
-    new Set(images.map((img) => img.body_part_clean).filter(Boolean))
+    new Set(
+      images
+        .map((img) => img.body_part_clean)
+        .filter((part): part is string => Boolean(part))
+    )
   );
 
   if (isLoading) {
@@ -122,7 +135,7 @@ export function ReportPanel({
     );
   }
 
-  if (!report) {
+  if (reports.length === 0) {
     return (
       <Card className="p-4">
         <h2 className="text-lg font-semibold mb-4">Report Data</h2>
@@ -131,13 +144,38 @@ export function ReportPanel({
     );
   }
 
+  const selectedReport = reports[Math.min(selectedReportIndex, reports.length - 1)];
+
   return (
     <Card className="p-4">
-      <h2 className="text-lg font-semibold mb-4">Report Data</h2>
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <h2 className="text-lg font-semibold">Report Data</h2>
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+          {reports.length} report{reports.length > 1 ? "s" : ""}
+        </span>
+      </div>
 
-      {report.has_missing_impression && (
+      {selectedReport.has_missing_impression && (
         <div className="mb-3 rounded border border-orange-300 bg-orange-100 p-2 text-sm text-orange-800">
-          Missing impression section in report
+          Missing impression section in selected report
+        </div>
+      )}
+
+      {reports.length > 1 && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {reports.map((report, index) => (
+            <button
+              key={report.id}
+              onClick={() => setSelectedReportIndex(index)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                selectedReportIndex === index
+                  ? "border-blue-500 bg-blue-50 text-blue-700"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+              }`}
+            >
+              {report.report_title?.trim() || `Report ${index + 1}`}
+            </button>
+          ))}
         </div>
       )}
 
@@ -174,11 +212,19 @@ export function ReportPanel({
         </button>
       </div>
 
+      <div className="mb-3 flex flex-wrap gap-3 text-xs text-slate-500">
+        {selectedReport.report_title && <span>Title: {selectedReport.report_title}</span>}
+        {selectedReport.created_at && (
+          <span>Created: {new Date(selectedReport.created_at).toLocaleString()}</span>
+        )}
+        {selectedReport.patient_name && <span>Patient: {selectedReport.patient_name}</span>}
+      </div>
+
       <div className="max-h-72 overflow-y-auto rounded bg-gray-50 p-3 text-sm leading-relaxed">
         {activeTab === "findings" && (
           <div>
-            {report.findings_text ? (
-              highlightText(report.findings_text, bodyParts)
+            {selectedReport.findings_text ? (
+              highlightText(selectedReport.findings_text, bodyParts)
             ) : (
               <p className="text-gray-500">No findings available</p>
             )}
@@ -186,8 +232,8 @@ export function ReportPanel({
         )}
         {activeTab === "impression" && (
           <div>
-            {report.impression_text ? (
-              highlightText(report.impression_text, bodyParts)
+            {selectedReport.impression_text ? (
+              highlightText(selectedReport.impression_text, bodyParts)
             ) : (
               <p className="text-gray-500">No impression available</p>
             )}
@@ -195,10 +241,10 @@ export function ReportPanel({
         )}
         {activeTab === "report" && (
           <div>
-            {report.full_report_text ? (
-              highlightText(report.full_report_text, bodyParts)
+            {selectedReport.raw_text ? (
+              highlightText(selectedReport.raw_text, bodyParts)
             ) : (
-              <p className="text-gray-500">No full report text available</p>
+              <p className="text-gray-500">No raw report text available</p>
             )}
           </div>
         )}

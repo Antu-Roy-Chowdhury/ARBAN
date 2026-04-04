@@ -29,7 +29,7 @@ function compareNatural(a: string, b: string) {
 function buildGalleryItems(images: StorageImage[], imageMetadata: ImageMetadata[]) {
   const sortedImages = [...images].sort((a, b) => compareNatural(a.name, b.name));
   const sortedMetadata = [...imageMetadata].sort(
-    (a, b) => a.instance_number - b.instance_number
+    (a, b) => (a.instance_number ?? Number.MAX_SAFE_INTEGER) - (b.instance_number ?? Number.MAX_SAFE_INTEGER)
   );
 
   const metadataByName = new Map<string, ImageMetadata>();
