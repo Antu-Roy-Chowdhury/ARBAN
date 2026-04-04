@@ -238,19 +238,23 @@ function HomeContent() {
   };
 
   const handlePrevPatient = useCallback(() => {
-    if (!currentPatientId) return;
+    if (!currentPatientId || patientList.length === 0) return;
     const currentIndex = patientList.indexOf(currentPatientId);
     if (currentIndex > 0) {
       setCurrentPatientId(patientList[currentIndex - 1]);
+      return;
     }
+    setCurrentPatientId(patientList[patientList.length - 1]);
   }, [currentPatientId, patientList]);
 
   const handleNextPatient = useCallback(() => {
-    if (!currentPatientId) return;
+    if (!currentPatientId || patientList.length === 0) return;
     const currentIndex = patientList.indexOf(currentPatientId);
     if (currentIndex < patientList.length - 1) {
       setCurrentPatientId(patientList[currentIndex + 1]);
+      return;
     }
+    setCurrentPatientId(patientList[0]);
   }, [currentPatientId, patientList]);
 
   useEffect(() => {
@@ -284,8 +288,7 @@ function HomeContent() {
   };
 
   const currentIndex = currentPatientId ? patientList.indexOf(currentPatientId) : -1;
-  const isFirstPatient = currentIndex <= 0;
-  const isLastPatient = currentIndex >= patientList.length - 1;
+  const isSinglePatient = patientList.length <= 1;
   const primaryReport = data.reports[0] || null;
 
   return (
@@ -297,9 +300,13 @@ function HomeContent() {
               Medical Image Report Verification
             </h1>
             <div className="flex items-center gap-3">
-              <Link href="/review-status" className="text-sm font-medium text-blue-700 hover:text-blue-900">
-                Review Status
-              </Link>
+              <Button
+                asChild
+                variant="outline"
+                className="border-blue-200 bg-white text-blue-700 shadow-sm hover:border-blue-300 hover:bg-blue-50 hover:text-blue-900"
+              >
+                <Link href="/review-status">Review Status</Link>
+              </Button>
               <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-800">
                 {Math.max(currentIndex + 1, 0)} / {patientList.length}
               </span>
@@ -351,7 +358,7 @@ function HomeContent() {
             <div className="flex items-end gap-2">
               <Button
                 onClick={handlePrevPatient}
-                disabled={isFirstPatient}
+                disabled={isSinglePatient}
                 variant="outline"
                 size="sm"
               >
@@ -359,13 +366,13 @@ function HomeContent() {
               </Button>
               <Button
                 onClick={handleNextPatient}
-                disabled={isLastPatient}
+                disabled={isSinglePatient}
                 variant="outline"
                 size="sm"
               >
                 Next
               </Button>
-              <p className="ml-2 text-xs text-gray-500">Arrow keys: left / right</p>
+              <p className="ml-2 text-xs text-gray-500">Arrow keys: left / right, queue wraps after review</p>
             </div>
           </div>
         </div>

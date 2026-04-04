@@ -99,7 +99,7 @@ export function ImageGallery({
       <Card className="p-4 h-full flex flex-col">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">Image Gallery ({items.length})</h2>
-          <p className="text-xs text-slate-500">Sorted from Supabase storage</p>
+          <p className="text-xs text-slate-500">Click a card to inspect metadata</p>
         </div>
         <div className="grid grid-cols-1 gap-3 overflow-y-auto pr-2 sm:grid-cols-2">
           {items.map(({ storage, metadata }, idx) => {
@@ -115,31 +115,50 @@ export function ImageGallery({
                 }}
                 className={`cursor-pointer overflow-hidden rounded-xl border-2 transition-all ${
                   isSelected
-                    ? "border-blue-500 shadow-lg"
-                    : "border-slate-200 hover:border-slate-300"
+                    ? "border-blue-500 bg-blue-50/40 shadow-lg"
+                    : "border-slate-200 hover:border-slate-300 hover:shadow-md"
                 }`}
               >
-                <div
-                  className="relative aspect-square bg-slate-100"
-                  onClick={() => setSelectedFullImage(storage)}
-                >
+                <div className="relative aspect-square bg-slate-100">
                   <img
                     src={storage.url}
                     alt={storage.name || `Image ${idx + 1}`}
                     className="h-full w-full object-contain"
                     loading="lazy"
                   />
+                  {isSelected && (
+                    <span className="absolute left-2 top-2 rounded-full bg-blue-600 px-2 py-1 text-[11px] font-semibold text-white shadow-sm">
+                      Selected
+                    </span>
+                  )}
                 </div>
-                <div className="space-y-1 bg-white p-3 text-xs">
-                  <p className="truncate font-semibold text-slate-900">
-                    {metadata?.body_part_clean || "Unmatched image"}
-                  </p>
-                  <p className="truncate text-slate-600">
-                    {metadata?.view_position || storage.name}
-                  </p>
-                  <p className="truncate font-mono text-[11px] text-slate-400">
-                    {storage.name}
-                  </p>
+                <div className="space-y-2 bg-white p-3 text-xs">
+                  <div className="space-y-1">
+                    <p className="truncate font-mono text-[11px] font-semibold text-slate-700">
+                      {storage.name}
+                    </p>
+                    <p className="truncate font-semibold text-slate-900">
+                      {metadata?.body_part_clean || "Unmatched image"}
+                    </p>
+                    <p className="truncate text-slate-600">
+                      {metadata?.view_position || metadata?.series_description || "No view metadata"}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] text-slate-400">
+                      {metadata?.instance_number ? `Image #${metadata.instance_number}` : `Image ${idx + 1}`}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedFullImage(storage);
+                      }}
+                      className="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                    >
+                      Preview
+                    </button>
+                  </div>
                 </div>
               </div>
             );

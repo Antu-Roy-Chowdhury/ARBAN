@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getReviewQueue } from "@/lib/supabase";
+import { Button } from "@/components/ui/button";
 
 export default async function ReviewStatusPage() {
   const queue = await getReviewQueue();
@@ -14,9 +15,13 @@ export default async function ReviewStatusPage() {
               Unreviewed patients are listed first.
             </p>
           </div>
-          <Link href="/" className="text-sm font-medium text-blue-700 hover:text-blue-900">
-            Back to Review App
-          </Link>
+          <Button
+            asChild
+            variant="outline"
+            className="border-blue-200 bg-white text-blue-700 shadow-sm hover:border-blue-300 hover:bg-blue-50 hover:text-blue-900"
+          >
+            <Link href="/">Back to Review App</Link>
+          </Button>
         </div>
 
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

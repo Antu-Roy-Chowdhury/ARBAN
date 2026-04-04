@@ -1,7 +1,6 @@
 "use client";
 
-import { StorageImage } from "@/lib/cloudinary";
-import Image from "next/image";
+import { StorageImage } from "@/lib/supabase";
 import { useEffect } from "react";
 
 interface ImageModalProps {
@@ -23,35 +22,30 @@ export function ImageModal({ image, onClose }: ImageModalProps) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={onClose}
     >
       <div
-        className="relative max-w-4xl max-h-[90vh] bg-white rounded-lg"
+        className="relative max-h-[90vh] max-w-4xl rounded-lg bg-white"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 w-10 h-10 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center z-10 transition-colors"
+          className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70"
         >
           ×
         </button>
 
-        <div className="relative w-full h-[70vh]">
-          <Image
+        <div className="relative h-[70vh] w-full">
+          <img
             src={image.url}
             alt="Full view"
-            fill
-            className="object-contain"
-            sizes="(max-width: 1024px) 90vw, 80vw"
-            priority
+            className="h-full w-full object-contain"
           />
         </div>
 
-        <div className="p-4 bg-gray-50 border-t">
-          <p className="text-sm text-gray-600">
-            {image.name}
-          </p>
+        <div className="border-t bg-gray-50 p-4">
+          <p className="text-sm text-gray-600">{image.name}</p>
         </div>
       </div>
     </div>
