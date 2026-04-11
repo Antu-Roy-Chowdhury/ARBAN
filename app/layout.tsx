@@ -7,8 +7,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Medical Image Report Verification',
-  description: 'Review and verify medical images with detailed reports and metadata',
+  title: 'ARBAN',
+  description: 'AI-Ready Bangladesh Archive of X-ray Networks review workspace',
   generator: 'v0.app',
   icons: {
     icon: [

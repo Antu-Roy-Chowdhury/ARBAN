@@ -75,6 +75,7 @@ export interface ReviewQueueItem {
   patient_name: string | null;
   image_count: number;
   report_count: number;
+  body_parts: string[];
   latest_reviewed_at: string | null;
   latest_review_status: Review["status"] | null;
   is_reviewed: boolean;
@@ -231,7 +232,7 @@ export async function getReviewQueue() {
       { data: reportRows, error: reportsError },
       { data: reviewRows, error: reviewsError },
     ] = await Promise.all([
-      supabase.from("images").select("patient_id"),
+      supabase.from("images").select("patient_id, body_part_clean"),
       supabase.from("patients").select("patient_id, patient_name"),
       supabase.from("reports").select("patient_id"),
       supabase
@@ -253,10 +254,22 @@ export async function getReviewQueue() {
     );
 
     const imageCountMap = new Map<string, number>();
+    const bodyPartMap = new Map<string, Set<string>>();
     for (const row of imageRows || []) {
-      const patientId = (row as { patient_id: string | null }).patient_id;
+      const image = row as {
+        patient_id: string | null;
+        body_part_clean?: string | null;
+      };
+      const patientId = image.patient_id;
       if (!patientId) continue;
+
       imageCountMap.set(patientId, (imageCountMap.get(patientId) || 0) + 1);
+
+      if (image.body_part_clean) {
+        const parts = bodyPartMap.get(patientId) || new Set<string>();
+        parts.add(image.body_part_clean);
+        bodyPartMap.set(patientId, parts);
+      }
     }
 
     const reportCountMap = new Map<string, number>();
@@ -293,6 +306,9 @@ export async function getReviewQueue() {
         patient_name: patientNameMap.get(patientId) || null,
         image_count: imageCountMap.get(patientId) || 0,
         report_count: reportCountMap.get(patientId) || 0,
+        body_parts: Array.from(bodyPartMap.get(patientId) || []).sort((a, b) =>
+          a.localeCompare(b, undefined, { sensitivity: "base" })
+        ),
         latest_reviewed_at: latestReview?.reviewed_at || null,
         latest_review_status: latestReview?.status || null,
         is_reviewed: reviewedSet.has(patientId),

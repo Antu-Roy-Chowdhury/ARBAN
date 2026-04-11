@@ -1,6 +1,7 @@
 "use client";
 
 import { Review } from "@/lib/supabase";
+import { formatBangladeshDateTime } from "@/lib/datetime";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -91,7 +92,7 @@ export function ReviewPanel({
       {review && (
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
           <p className="text-blue-900">
-            <span className="font-semibold">Last review:</span> {new Date(review.reviewed_at).toLocaleString()}
+            <span className="font-semibold">Last review:</span> {formatBangladeshDateTime(review.reviewed_at)}
           </p>
         </div>
       )}

@@ -20,7 +20,6 @@ import {
 import { PatientInfoPanel } from "@/components/PatientInfoPanel";
 import { DicomMetadataPanel } from "@/components/DicomMetadataPanel";
 import { ReportPanel } from "@/components/ReportPanel";
-import { AutoFlagsPanel } from "@/components/AutoFlagsPanel";
 import { ReviewPanel } from "@/components/ReviewPanel";
 import { ImageGallery } from "@/components/ImageGallery";
 import { Button } from "@/components/ui/button";
@@ -289,17 +288,26 @@ function HomeContent() {
 
   const currentIndex = currentPatientId ? patientList.indexOf(currentPatientId) : -1;
   const isSinglePatient = patientList.length <= 1;
-  const primaryReport = data.reports[0] || null;
-
   return (
-    <main className="min-h-screen bg-white">
-      <header className="sticky top-0 z-40 border-b bg-gray-50">
-        <div className="mx-auto max-w-[1600px] px-6 py-4">
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <h1 className="text-2xl font-bold text-gray-900">
-              Medical Image Report Verification
-            </h1>
-            <div className="flex items-center gap-3">
+    <main className="min-h-screen bg-[linear-gradient(180deg,_#f8fbff_0%,_#ffffff_28%)]">
+      <header className="border-b border-slate-200/80 bg-white/95 md:sticky md:top-0 md:z-40 md:backdrop-blur">
+        <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6">
+          <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="mb-3 inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-800">
+                ARBAN
+              </div>
+              <div className="flex flex-col gap-1">
+                <h1 className="text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">
+                  AI-Ready Bangladesh Archive of X-ray Networks
+                </h1>
+                <p className="max-w-3xl text-sm text-slate-600">
+                  Review chest x-ray cases, compare reports, and submit verification with Bangladesh-time tracking.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
               <Button
                 asChild
                 variant="outline"
@@ -313,8 +321,8 @@ function HomeContent() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="min-w-[220px]">
+          <div className="grid gap-4 md:grid-cols-[minmax(0,240px)_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,320px)_auto] xl:items-end">
+            <div className="min-w-0">
               <label className="mb-2 block text-sm font-semibold text-gray-700">
                 Find by Patient ID
               </label>
@@ -328,7 +336,7 @@ function HomeContent() {
                       handleFindPatient();
                     }
                   }}
-                  className="w-40 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Patient ID"
                 />
                 <Button type="button" onClick={handleFindPatient} size="sm">
@@ -337,14 +345,14 @@ function HomeContent() {
               </div>
             </div>
 
-            <div className="min-w-[260px] flex-1">
+            <div className="min-w-0">
               <label className="mb-2 block text-sm font-semibold text-gray-700">
                 Filter by Body Part
               </label>
               <select
                 value={selectedFilter}
                 onChange={(e) => handleFilterChange(e.target.value)}
-                className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 xl:max-w-xs"
               >
                 <option value="ALL">All Body Parts</option>
                 {bodyParts.map((part) => (
@@ -355,7 +363,7 @@ function HomeContent() {
               </select>
             </div>
 
-            <div className="flex items-end gap-2">
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               <Button
                 onClick={handlePrevPatient}
                 disabled={isSinglePatient}
@@ -372,13 +380,13 @@ function HomeContent() {
               >
                 Next
               </Button>
-              <p className="ml-2 text-xs text-gray-500">Arrow keys: left / right, queue wraps after review</p>
+              <p className="text-xs text-gray-500 xl:ml-2">Arrow keys: left / right</p>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1600px] px-6 py-6">
+      <div className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 sm:py-6">
         {error && (
           <div className="mb-4 rounded border border-red-200 bg-red-50 p-4 text-red-800">
             {error}
@@ -388,7 +396,7 @@ function HomeContent() {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_360px]">
           <div className="space-y-4">
             <PatientInfoPanel patient={data.patient} isLoading={loading.patient} />
-            <div className="h-[calc(100vh-280px)] min-h-[520px] overflow-hidden">
+            <div className="min-h-[320px] overflow-hidden rounded-xl xl:h-[calc(100vh-280px)] xl:min-h-[520px]">
               <ImageGallery
                 images={data.storageImages}
                 imageMetadata={data.images}
@@ -410,14 +418,9 @@ function HomeContent() {
               images={data.images}
               isLoading={loading.report}
             />
-            <AutoFlagsPanel
-              report={primaryReport}
-              images={data.images}
-              isLoading={loading.report}
-            />
           </div>
 
-          <div className="xl:sticky xl:top-28 xl:h-fit">
+          <div className="xl:sticky xl:top-24 xl:h-fit">
             <ReviewPanel
               review={data.review}
               patientId={currentPatientId || ""}
