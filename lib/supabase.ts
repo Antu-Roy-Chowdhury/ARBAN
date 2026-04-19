@@ -70,6 +70,20 @@ export interface Review {
   reviewed_at: string;
 }
 
+export interface SecondPassReview {
+  id: number;
+  source_review_id: number;
+  patient_id: string;
+  image_id: number | null;
+  review_decision: "approved" | "corrected";
+  status: Review["status"];
+  label: Review["label"];
+  final_impression: string | null;
+  notes: string | null;
+  reviewer2_name: string;
+  reviewed_at: string;
+}
+
 export interface ReviewQueueItem {
   patient_id: string;
   patient_name: string | null;
@@ -78,27 +92,45 @@ export interface ReviewQueueItem {
   body_parts: string[];
   latest_reviewed_at: string | null;
   latest_review_status: Review["status"] | null;
+  latest_second_pass_reviewed_at: string | null;
+  latest_second_pass_status: Review["status"] | null;
+  latest_second_pass_decision: SecondPassReview["review_decision"] | null;
   is_reviewed: boolean;
+  is_second_pass_reviewed: boolean;
 }
 
 function naturalCompare(a: string, b: string) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
 
-function sortPatientsByReviewStatus(patientIds: string[], reviewedSet: Set<string>) {
+function sortPatientsByReviewStatus(
+  patientIds: string[],
+  firstReviewedSet: Set<string>,
+  secondReviewedSet: Set<string>
+) {
   return [...patientIds].sort((a, b) => {
-    const aReviewed = reviewedSet.has(a);
-    const bReviewed = reviewedSet.has(b);
+    const aNeedsSecondPass = firstReviewedSet.has(a) && !secondReviewedSet.has(a);
+    const bNeedsSecondPass = firstReviewedSet.has(b) && !secondReviewedSet.has(b);
+    const aFirstPending = !firstReviewedSet.has(a);
+    const bFirstPending = !firstReviewedSet.has(b);
 
-    if (aReviewed !== bReviewed) {
-      return aReviewed ? 1 : -1;
+    if (aNeedsSecondPass !== bNeedsSecondPass) {
+      return aNeedsSecondPass ? -1 : 1;
+    }
+
+    if (aFirstPending !== bFirstPending) {
+      return aFirstPending ? 1 : -1;
     }
 
     return naturalCompare(a, b);
   });
 }
 
-export async function getDistinctPatients(bodyPartFilter?: string) {
+export async function getDistinctPatients(
+  bodyPartFilter?: string,
+  reviewStatusFilter: "ALL" | "PENDING_SECOND_PASS" | "COMPLETED_SECOND_PASS" | "FIRST_PASS_PENDING" = "ALL",
+  resultFilter: "ALL" | Review["status"] = "ALL"
+) {
   try {
     let imagesQuery = supabase.from("images").select("patient_id");
 
@@ -106,14 +138,27 @@ export async function getDistinctPatients(bodyPartFilter?: string) {
       imagesQuery = imagesQuery.eq("body_part_clean", bodyPartFilter);
     }
 
-    const [{ data: imageRows, error: imagesError }, { data: reviewRows, error: reviewsError }] =
+    const [
+      { data: imageRows, error: imagesError },
+      { data: reviewRows, error: reviewsError },
+      { data: secondPassRows, error: secondPassError },
+    ] =
       await Promise.all([
         imagesQuery,
-        supabase.from("reviews").select("patient_id").not("patient_id", "is", null),
+        supabase
+          .from("reviews")
+          .select("patient_id, status, reviewed_at")
+          .not("patient_id", "is", null)
+          .order("reviewed_at", { ascending: false }),
+        supabase
+          .from("reviews_second_pass")
+          .select("patient_id")
+          .not("patient_id", "is", null),
       ]);
 
     if (imagesError) throw imagesError;
     if (reviewsError) throw reviewsError;
+    if (secondPassError) throw secondPassError;
 
     const patientIds = Array.from(
       new Set(
@@ -129,7 +174,43 @@ export async function getDistinctPatients(bodyPartFilter?: string) {
         .filter((id): id is string => Boolean(id))
     );
 
-    return sortPatientsByReviewStatus(patientIds, reviewedSet);
+    const secondReviewedSet = new Set(
+      (secondPassRows || [])
+        .map((row: { patient_id: string | null }) => row.patient_id)
+        .filter((id): id is string => Boolean(id))
+    );
+
+    const latestStatusByPatient = new Map<string, Review["status"] | null>();
+    for (const row of reviewRows || []) {
+      const review = row as {
+        patient_id: string | null;
+        status?: Review["status"] | null;
+      };
+      if (!review.patient_id || latestStatusByPatient.has(review.patient_id)) continue;
+      latestStatusByPatient.set(review.patient_id, review.status || null);
+    }
+
+    const filteredPatientIds = patientIds.filter((patientId) => {
+      const matchesWorkflow = (() => {
+        switch (reviewStatusFilter) {
+        case "PENDING_SECOND_PASS":
+          return reviewedSet.has(patientId) && !secondReviewedSet.has(patientId);
+        case "COMPLETED_SECOND_PASS":
+          return secondReviewedSet.has(patientId);
+        case "FIRST_PASS_PENDING":
+          return !reviewedSet.has(patientId);
+        default:
+          return true;
+        }
+      })();
+
+      const matchesResult =
+        resultFilter === "ALL" || latestStatusByPatient.get(patientId) === resultFilter;
+
+      return matchesWorkflow && matchesResult;
+    });
+
+    return sortPatientsByReviewStatus(filteredPatientIds, reviewedSet, secondReviewedSet);
   } catch (error) {
     console.error("Error fetching distinct patients:", error);
     throw error;
@@ -203,6 +284,23 @@ export async function getPatientLatestReview(patientId: string) {
   }
 }
 
+export async function getPatientLatestSecondPassReview(patientId: string) {
+  try {
+    const { data, error } = await supabase
+      .from("reviews_second_pass")
+      .select("*")
+      .eq("patient_id", patientId)
+      .order("reviewed_at", { ascending: false })
+      .limit(1);
+
+    if (error) throw error;
+    return data?.[0] as SecondPassReview | null;
+  } catch (error) {
+    console.error("Error fetching patient second-pass review:", error);
+    return null;
+  }
+}
+
 export async function getDistinctBodyParts() {
   try {
     const { data, error } = await supabase.from("images").select("body_part_clean");
@@ -231,6 +329,7 @@ export async function getReviewQueue() {
       { data: patientRows, error: patientsError },
       { data: reportRows, error: reportsError },
       { data: reviewRows, error: reviewsError },
+      { data: secondPassRows, error: secondPassError },
     ] = await Promise.all([
       supabase.from("images").select("patient_id, body_part_clean"),
       supabase.from("patients").select("patient_id, patient_name"),
@@ -239,12 +338,17 @@ export async function getReviewQueue() {
         .from("reviews")
         .select("patient_id, reviewed_at, status")
         .order("reviewed_at", { ascending: false }),
+      supabase
+        .from("reviews_second_pass")
+        .select("patient_id, reviewed_at, status, review_decision")
+        .order("reviewed_at", { ascending: false }),
     ]);
 
     if (imagesError) throw imagesError;
     if (patientsError) throw patientsError;
     if (reportsError) throw reportsError;
     if (reviewsError) throw reviewsError;
+    if (secondPassError) throw secondPassError;
 
     const patientNameMap = new Map(
       (patientRows || []).map((row: { patient_id: string; patient_name: string | null }) => [
@@ -296,11 +400,36 @@ export async function getReviewQueue() {
       });
     }
 
+    const latestSecondPassMap = new Map<
+      string,
+      {
+        reviewed_at: string | null;
+        status: Review["status"] | null;
+        review_decision: SecondPassReview["review_decision"] | null;
+      }
+    >();
+    for (const row of secondPassRows || []) {
+      const review = row as {
+        patient_id: string | null;
+        reviewed_at: string | null;
+        status: Review["status"] | null;
+        review_decision: SecondPassReview["review_decision"] | null;
+      };
+      if (!review.patient_id || latestSecondPassMap.has(review.patient_id)) continue;
+      latestSecondPassMap.set(review.patient_id, {
+        reviewed_at: review.reviewed_at,
+        status: review.status,
+        review_decision: review.review_decision,
+      });
+    }
+
     const patientIds = Array.from(imageCountMap.keys());
     const reviewedSet = new Set(latestReviewMap.keys());
+    const secondReviewedSet = new Set(latestSecondPassMap.keys());
 
-    return sortPatientsByReviewStatus(patientIds, reviewedSet).map((patientId) => {
+    return sortPatientsByReviewStatus(patientIds, reviewedSet, secondReviewedSet).map((patientId) => {
       const latestReview = latestReviewMap.get(patientId);
+      const latestSecondPass = latestSecondPassMap.get(patientId);
       return {
         patient_id: patientId,
         patient_name: patientNameMap.get(patientId) || null,
@@ -311,7 +440,11 @@ export async function getReviewQueue() {
         ),
         latest_reviewed_at: latestReview?.reviewed_at || null,
         latest_review_status: latestReview?.status || null,
+        latest_second_pass_reviewed_at: latestSecondPass?.reviewed_at || null,
+        latest_second_pass_status: latestSecondPass?.status || null,
+        latest_second_pass_decision: latestSecondPass?.review_decision || null,
         is_reviewed: reviewedSet.has(patientId),
+        is_second_pass_reviewed: secondReviewedSet.has(patientId),
       } satisfies ReviewQueueItem;
     });
   } catch (error) {
@@ -332,6 +465,26 @@ export async function submitReview(review: Omit<Review, "id" | "reviewed_at">) {
     return data as Review;
   } catch (error) {
     console.error("Error submitting review:", error);
+    throw error;
+  }
+}
+
+export async function submitSecondPassReview(
+  review: Omit<SecondPassReview, "id" | "reviewed_at">
+) {
+  try {
+    const { data, error } = await supabase
+      .from("reviews_second_pass")
+      .upsert([{ ...review, reviewed_at: new Date().toISOString() }], {
+        onConflict: "source_review_id",
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as SecondPassReview;
+  } catch (error) {
+    console.error("Error submitting second-pass review:", error);
     throw error;
   }
 }

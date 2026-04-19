@@ -9,12 +9,14 @@ import {
   getPatientImages,
   getPatientReports,
   getPatientLatestReview,
+  getPatientLatestSecondPassReview,
   getDistinctBodyParts,
-  submitReview,
+  submitSecondPassReview,
   Patient,
   ImageMetadata,
   Report,
   Review,
+  SecondPassReview,
   StorageImage,
 } from "@/lib/supabase";
 import { PatientInfoPanel } from "@/components/PatientInfoPanel";
@@ -30,6 +32,7 @@ interface DataState {
   storageImages: StorageImage[];
   reports: Report[];
   review: Review | null;
+  secondPassReview: SecondPassReview | null;
 }
 
 function normalizePatientKey(value: string) {
@@ -46,6 +49,12 @@ function HomeContent() {
   const [selectedFilter, setSelectedFilter] = useState<string>(
     searchParams.get("filter") || "ALL"
   );
+  const [selectedReviewStatus, setSelectedReviewStatus] = useState<
+    "ALL" | "PENDING_SECOND_PASS" | "COMPLETED_SECOND_PASS" | "FIRST_PASS_PENDING"
+  >((searchParams.get("reviewStatus") as "ALL" | "PENDING_SECOND_PASS" | "COMPLETED_SECOND_PASS" | "FIRST_PASS_PENDING") || "ALL");
+  const [selectedResultStatus, setSelectedResultStatus] = useState<"ALL" | Review["status"]>(
+    (searchParams.get("resultStatus") as "ALL" | Review["status"]) || "ALL"
+  );
   const [currentPatientId, setCurrentPatientId] = useState<string | null>(
     searchParams.get("patient") || null
   );
@@ -60,6 +69,7 @@ function HomeContent() {
     storageImages: [],
     reports: [],
     review: null,
+    secondPassReview: null,
   });
 
   const [loading, setLoading] = useState({
@@ -99,7 +109,9 @@ function HomeContent() {
       setLoading((prev) => ({ ...prev, patients: true }));
       try {
         const patients = await getDistinctPatients(
-          selectedFilter === "ALL" ? undefined : selectedFilter
+          selectedFilter === "ALL" ? undefined : selectedFilter,
+          selectedReviewStatus,
+          selectedResultStatus
         );
         setPatientList(patients);
 
@@ -117,7 +129,7 @@ function HomeContent() {
     };
 
     loadPatients();
-  }, [selectedFilter, currentPatientId]);
+  }, [selectedFilter, selectedReviewStatus, selectedResultStatus, currentPatientId]);
 
   useEffect(() => {
     if (currentPatientId) {
@@ -128,12 +140,14 @@ function HomeContent() {
   useEffect(() => {
     const params = new URLSearchParams();
     if (selectedFilter !== "ALL") params.set("filter", selectedFilter);
+    if (selectedReviewStatus !== "ALL") params.set("reviewStatus", selectedReviewStatus);
+    if (selectedResultStatus !== "ALL") params.set("resultStatus", selectedResultStatus);
     if (currentPatientId) params.set("patient", currentPatientId);
 
     const queryString = params.toString();
     const newUrl = queryString ? `/?${queryString}` : "/";
     window.history.replaceState({}, "", newUrl);
-  }, [selectedFilter, currentPatientId]);
+  }, [selectedFilter, selectedReviewStatus, selectedResultStatus, currentPatientId]);
 
   useEffect(() => {
     if (!currentPatientId) return;
@@ -151,11 +165,12 @@ function HomeContent() {
       setSelectedImageId(null);
 
       try {
-        const [patient, images, reports, review] = await Promise.all([
+        const [patient, images, reports, review, secondPassReview] = await Promise.all([
           getPatientInfo(currentPatientId),
           getPatientImages(currentPatientId),
           getPatientReports(currentPatientId),
           getPatientLatestReview(currentPatientId),
+          getPatientLatestSecondPassReview(currentPatientId),
         ]);
 
         setData({
@@ -164,6 +179,7 @@ function HomeContent() {
           storageImages: [],
           reports,
           review,
+          secondPassReview,
         });
 
         if (images && images.length > 0) {
@@ -269,16 +285,18 @@ function HomeContent() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handlePrevPatient, handleNextPatient]);
 
-  const handleSubmitReview = async (
-    review: Omit<Review, "id" | "reviewed_at">
+  const handleSubmitSecondPass = async (
+    review: Omit<SecondPassReview, "id" | "reviewed_at">
   ) => {
     setSubmitting(true);
     try {
-      await submitReview(review);
-      const latestReview = await getPatientLatestReview(currentPatientId!);
-      setData((prev) => ({ ...prev, review: latestReview }));
+      await submitSecondPassReview(review);
+      const latestSecondPassReview = await getPatientLatestSecondPassReview(currentPatientId!);
+      setData((prev) => ({ ...prev, secondPassReview: latestSecondPassReview }));
       const refreshedPatients = await getDistinctPatients(
-        selectedFilter === "ALL" ? undefined : selectedFilter
+        selectedFilter === "ALL" ? undefined : selectedFilter,
+        selectedReviewStatus,
+        selectedResultStatus
       );
       setPatientList(refreshedPatients);
     } finally {
@@ -321,7 +339,7 @@ function HomeContent() {
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-[minmax(0,240px)_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,320px)_auto] xl:items-end">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[220px_250px_220px_minmax(0,220px)_auto] xl:items-end">
             <div className="min-w-0">
               <label className="mb-2 block text-sm font-semibold text-gray-700">
                 Find by Patient ID
@@ -360,6 +378,46 @@ function HomeContent() {
                     {part}
                   </option>
                 ))}
+              </select>
+            </div>
+
+            <div className="min-w-0">
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Filter by Review Status
+              </label>
+              <select
+                value={selectedReviewStatus}
+                onChange={(e) =>
+                  setSelectedReviewStatus(
+                    e.target.value as
+                      | "ALL"
+                      | "PENDING_SECOND_PASS"
+                      | "COMPLETED_SECOND_PASS"
+                      | "FIRST_PASS_PENDING"
+                  )
+                }
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ALL">All patients</option>
+                <option value="PENDING_SECOND_PASS">Pending 2nd review</option>
+                <option value="COMPLETED_SECOND_PASS">2nd review done</option>
+                <option value="FIRST_PASS_PENDING">1st review not done</option>
+              </select>
+            </div>
+
+            <div className="min-w-0">
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Filter by Result
+              </label>
+              <select
+                value={selectedResultStatus}
+                onChange={(e) => setSelectedResultStatus(e.target.value as "ALL" | Review["status"])}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ALL">All results</option>
+                <option value="matched">Matched</option>
+                <option value="mismatch">Mismatch</option>
+                <option value="unsure">Unsure</option>
               </select>
             </div>
 
@@ -423,9 +481,10 @@ function HomeContent() {
           <div className="xl:sticky xl:top-24 xl:h-fit">
             <ReviewPanel
               review={data.review}
+              secondPassReview={data.secondPassReview}
               patientId={currentPatientId || ""}
               imageId={selectedImageId}
-              onSubmit={handleSubmitReview}
+              onSubmit={handleSubmitSecondPass}
               isLoading={loading.review}
               isSubmitting={submitting}
             />

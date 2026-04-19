@@ -72,9 +72,9 @@ export function ImageGallery({
     return (
       <Card className="p-4 h-full">
         <h2 className="text-lg font-semibold mb-4">Image Gallery</h2>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 justify-items-center gap-3 overflow-y-auto pr-2 md:grid-cols-2">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="aspect-square bg-gray-200 rounded animate-pulse" />
+            <div key={i} className="h-[320px] w-[320px] max-w-full rounded-xl bg-gray-200 animate-pulse" />
           ))}
         </div>
       </Card>
@@ -99,9 +99,9 @@ export function ImageGallery({
       <Card className="p-4 h-full flex flex-col">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">Image Gallery ({items.length})</h2>
-          <p className="text-xs text-slate-500">Click a card to inspect metadata</p>
+          <p className="text-xs text-slate-500">Fixed preview size keeps larger studies readable</p>
         </div>
-        <div className="grid grid-cols-1 gap-3 overflow-y-auto pr-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 justify-items-center gap-4 overflow-y-auto pr-2 md:grid-cols-2">
           {items.map(({ storage, metadata }, idx) => {
             const isSelected = selectedImageId === metadata?.id;
 
@@ -113,13 +113,13 @@ export function ImageGallery({
                     onSelectImage?.(metadata.id);
                   }
                 }}
-                className={`cursor-pointer overflow-hidden rounded-xl border-2 transition-all ${
+                className={`w-[320px] max-w-full shrink-0 cursor-pointer overflow-hidden rounded-xl border-2 transition-all ${
                   isSelected
                     ? "border-blue-500 bg-blue-50/40 shadow-lg"
                     : "border-slate-200 hover:border-slate-300 hover:shadow-md"
                 }`}
               >
-                <div className="relative aspect-square bg-slate-100">
+                <div className="relative h-[320px] w-full bg-slate-100">
                   <img
                     src={storage.url}
                     alt={storage.name || `Image ${idx + 1}`}
@@ -144,8 +144,8 @@ export function ImageGallery({
                       {metadata?.view_position || metadata?.series_description || "No view metadata"}
                     </p>
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[11px] text-slate-400">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="min-w-0 flex-1 text-[11px] text-slate-400">
                       {metadata?.instance_number ? `Image #${metadata.instance_number}` : `Image ${idx + 1}`}
                     </p>
                     <button
@@ -154,7 +154,7 @@ export function ImageGallery({
                         e.stopPropagation();
                         setSelectedFullImage(storage);
                       }}
-                      className="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                      className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-50"
                     >
                       Preview
                     </button>
